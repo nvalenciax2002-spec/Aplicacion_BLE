@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgroMonitor - Receptor BLE</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0f6e56">
+<style>
+  :root {
+    --bg: #f4f4f1; --card: #ffffff; --txt: #1f1f1d; --muted: #6b6b66;
+    --borde: #d9d8d2; --acento: #0f6e56; --acento-txt: #ffffff;
+    --ok: #3b6d11; --err: #a32d2d; --aviso-bg: #faeeda; --aviso-txt: #633806;
+    --fila: #f4f4f1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161614; --card: #22221f; --txt: #ecebe5; --muted: #a3a29a;
+      --borde: #3a3a36; --acento: #5dcaa5; --acento-txt: #04342c;
+      --ok: #97c459; --err: #f09595; --aviso-bg: #412402; --aviso-txt: #fac775;
+      --fila: #2b2b27;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--txt);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header { padding: 20px 16px 8px; max-width: 760px; margin: 0 auto; }
+  h1 { margin: 0; font-size: 22px; font-weight: 600; }
+  .sub { margin: 2px 0 12px; color: var(--muted); font-size: 14px; }
+  main { max-width: 760px; margin: 0 auto; padding: 0 16px 40px; }
+  .card {
+    background: var(--card); border: 1px solid var(--borde); border-radius: 12px;
+    padding: 16px; margin-bottom: 14px;
+  }
+  .card h2 { margin: 0 0 12px; font-size: 16px; font-weight: 600; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px;
+    border: 1px solid var(--borde); border-radius: 999px; font-size: 14px; background: var(--card);
+  }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+  .dot.on { background: var(--ok); } .dot.err { background: var(--err); }
+  .dot.wait { background: #ba7517; }
+  .botones { display: flex; flex-wrap: wrap; gap: 10px; }
+  button {
+    font: inherit; min-height: 46px; padding: 0 18px; border-radius: 10px; cursor: pointer;
+    border: 1px solid var(--borde); background: var(--card); color: var(--txt);
+  }
+  button.pri { background: var(--acento); color: var(--acento-txt); border-color: var(--acento); font-weight: 600; }
+  button.peligro { color: var(--err); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button[hidden] { display: none; }
+  .aviso {
+    margin: 12px 0 0; padding: 10px 12px; border-radius: 8px; font-size: 14px;
+    background: var(--aviso-bg); color: var(--aviso-txt);
+  }
+  .aviso[hidden] { display: none; }
+  .resumen { color: var(--muted); font-size: 14px; margin-bottom: 10px; }
+  .tabla-wrap { overflow-x: auto; border: 1px solid var(--borde); border-radius: 8px; margin-bottom: 12px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; white-space: nowrap; }
+  th, td { padding: 7px 10px; text-align: right; border-bottom: 1px solid var(--borde); }
+  th { background: var(--fila); font-weight: 600; position: sticky; top: 0; }
+  td:nth-child(2), th:nth-child(2), td:nth-child(3), th:nth-child(3) { text-align: left; }
+  tr:last-child td { border-bottom: none; }
+  td.app { font-style: italic; color: var(--muted); }
+  td.vacio { text-align: center; color: var(--muted); padding: 22px; font-style: italic; }
+  label { display: block; font-size: 14px; color: var(--muted); margin: 12px 0 4px; }
+  label.chk { display: flex; align-items: center; gap: 10px; color: var(--txt); margin: 10px 0; }
+  input[type=text], select {
+    width: 100%; font: inherit; min-height: 46px; padding: 0 12px; border-radius: 10px;
+    border: 1px solid var(--borde); background: var(--bg); color: var(--txt);
+  }
+  input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--acento); }
+  .preview { font-size: 14px; color: var(--muted); margin: 8px 0 14px; word-break: break-all; }
+  .preview b { color: var(--txt); font-weight: 600; }
+  details.card summary { cursor: pointer; font-weight: 600; }
+  pre#log {
+    margin: 12px 0 0; max-height: 220px; overflow: auto; font-size: 12px; line-height: 1.45;
+    background: var(--bg); padding: 10px; border-radius: 8px; white-space: pre-wrap; word-break: break-all;
+  }
+
+  /* ---- Cabecera con logo ---- */
+  header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+  .marca { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .logo-caja {
+    background: #ffffff; border: 1px solid var(--borde); border-radius: 12px;
+    padding: 6px 12px; display: flex; align-items: center; min-height: 52px;
+  }
+  .logo { height: 40px; width: auto; display: block; }
+  .logo-texto { display: flex; flex-direction: column; line-height: 1.05; color: #1f1f1d; font-weight: 700; font-size: 18px; letter-spacing: .04em; }
+  .logo-texto span { font-size: 12px; font-weight: 600; letter-spacing: .28em; color: #0f6e56; }
+  .logo-texto[hidden], .logo[hidden] { display: none; }
+  .titulos .sub { margin: 0; }
+
+  /* ---- Panel del equipo (recrea la pantalla OLED) ---- */
+  .panel-cab { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .panel-cab h2 { margin: 0; }
+  .badge { font-size: 13px; padding: 3px 12px; border-radius: 999px; border: 1px solid var(--borde); background: var(--bg); color: var(--muted); }
+  .badge.auto { color: var(--acento); border-color: var(--acento); }
+  .badge.manual { color: var(--ok); border-color: var(--ok); }
+  .actualizacion { margin: 8px 0 14px; font-size: 14px; color: var(--muted); }
+  .actualizacion b { color: var(--txt); font-weight: 600; }
+  .rejilla { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  @media (min-width: 600px) { .rejilla { grid-template-columns: repeat(3, 1fr); } }
+  .tile { background: var(--bg); border: 1px solid var(--borde); border-radius: 12px; padding: 12px 14px; min-width: 0; }
+  .tile-ancho { grid-column: 1 / -1; }
+  .t-etiqueta { font-size: 13px; color: var(--muted); }
+  .t-valor { font-size: 32px; font-weight: 600; line-height: 1.2; font-variant-numeric: tabular-nums; }
+  .t-valor small { font-size: 16px; font-weight: 500; color: var(--muted); margin-left: 4px; }
+  .t-hora { font-size: 38px; font-weight: 600; line-height: 1.15; font-variant-numeric: tabular-nums; }
+  .t-sub { font-size: 14px; color: var(--muted); }
+  .t-estado { font-size: 18px; font-weight: 600; }
+  .barra { height: 6px; background: var(--borde); border-radius: 3px; margin-top: 8px; overflow: hidden; }
+  .barra > div { height: 100%; width: 0; background: var(--acento); transition: width .4s; }
+  .contadores { display: grid; grid-template-columns: repeat(3, 1fr); text-align: center; }
+  .contadores span { display: block; font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .contadores small { color: var(--muted); font-size: 13px; }
+  .estado { display: flex; align-items: center; gap: 12px; }
+  .estado-ico { width: 38px; height: 38px; flex: none; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--card); border: 1px solid var(--borde); color: var(--muted); }
+  .estado-ico svg { width: 20px; height: 20px; }
+  .estado-ico.ok { color: var(--ok); border-color: var(--ok); }
+  .estado-ico.err { color: var(--err); border-color: var(--err); }
+  .medir { display: flex; align-items: center; gap: 14px; margin-top: 14px; flex-wrap: wrap; }
+  .medir .t-sub { flex: 1; min-width: 200px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="marca">
+    <div class="logo-caja">
+      <!-- El logo se carga desde LOGO_SRC (ver el script). Si no se encuentra, se muestra este texto. -->
+      <img id="logo" class="logo" alt="INICTEL - UNI" hidden>
+      <span id="logoTexto" class="logo-texto">INICTEL<span>UNI</span></span>
+    </div>
+    <div class="titulos">
+      <h1>AgroMonitor</h1>
+      <p class="sub">Receptor BLE · monitoreo de palto</p>
+    </div>
+  </div>
+  <span class="pill" role="status"><span id="dot" class="dot"></span><span id="estado">Sin conexión</span></span>
+</header>
+
+<main>
+  <section class="card">
+    <h2>1. Conexión</h2>
+    <div class="botones">
+      <button id="btnConectar" class="pri">Conectar al equipo</button>
+      <button id="btnReconectar" hidden>Reconectar</button>
+      <button id="btnDesconectar" hidden>Desconectar</button>
+    </div>
+    <label class="chk"><input type="checkbox" id="chkTodos"> Mostrar todos los dispositivos BLE (diagnóstico)</label>
+    <p id="aviso" class="aviso" hidden></p>
+    <details style="margin-top:10px">
+      <summary>¿No aparece el equipo en la lista?</summary>
+      <ol style="font-size:14px;padding-left:20px;margin:10px 0 0">
+        <li>En el equipo, en modo ESTACION, pulsa IZQ hasta ver <b>BLE:ANUNCIANDO</b>.</li>
+        <li>Desconecta cualquier otro dispositivo (celular, Serial Bluetooth Terminal): el equipo acepta <b>una sola conexión</b> y mientras está ocupada deja de anunciarse.</li>
+        <li>Enciende el Bluetooth de la laptop y usa Chrome o Edge (no Firefox, Safari ni Brave).</li>
+        <li>Marca "Mostrar todos los dispositivos" y busca <b>AgroMonitor_ESP32</b>. Si aparece así pero no con el filtro normal, avísame.</li>
+        <li>Windows: quita el equipo en Configuración &gt; Bluetooth (guarda una copia antigua de sus servicios). Linux: activa <code>chrome://flags/#enable-web-bluetooth</code>.</li>
+        <li>Comprueba con la app nRF Connect (celular) que el equipo realmente anuncia.</li>
+      </ol>
+    </details>
+  </section>
+
+  <section class="card" id="panel">
+    <div class="panel-cab">
+      <h2>2. Panel del equipo</h2>
+      <span id="pModo" class="badge" hidden></span>
+    </div>
+    <p class="actualizacion">Última actualización: <b id="pRecibido">sin datos</b> <span id="pHace"></span></p>
+
+    <div class="rejilla">
+      <div class="tile tile-ancho">
+        <div class="t-etiqueta">Fecha y hora del equipo (RTC)</div>
+        <div class="t-hora" id="pHora">--:--:--</div>
+        <div class="t-sub" id="pFecha">--/--/----</div>
+      </div>
+      <div class="tile">
+        <div class="t-etiqueta">Humedad de suelo</div>
+        <div class="t-valor"><span id="pSuelo">—</span><small>%</small></div>
+        <div class="barra"><div id="bSuelo"></div></div>
+      </div>
+      <div class="tile">
+        <div class="t-etiqueta">Temperatura ambiente</div>
+        <div class="t-valor"><span id="pTemp">—</span><small>°C</small></div>
+      </div>
+      <div class="tile">
+        <div class="t-etiqueta">Humedad ambiente</div>
+        <div class="t-valor"><span id="pHum">—</span><small>%</small></div>
+        <div class="barra"><div id="bHum"></div></div>
+      </div>
+      <div class="tile">
+        <div class="t-etiqueta">SPAD</div>
+        <div class="t-valor"><span id="pSpad">—</span></div>
+        <div class="t-sub">última lectura conocida</div>
+      </div>
+      <div class="tile estado">
+        <div class="estado-ico" id="pSdIco"></div>
+        <div><div class="t-etiqueta">Tarjeta SD</div><div class="t-estado" id="pSdTxt">Sin datos</div></div>
+      </div>
+      <div class="tile estado">
+        <div class="estado-ico" id="pBleIco"></div>
+        <div><div class="t-etiqueta">Bluetooth (BLE)</div><div class="t-estado" id="pBleTxt">Desconectado</div></div>
+      </div>
+      <div class="tile tile-ancho">
+        <div class="t-etiqueta" style="margin-bottom:6px">Número de medición</div>
+        <div class="contadores">
+          <div><span id="pNMan">—</span><small>Manual</small></div>
+          <div><span id="pNAuto">—</span><small>Automática</small></div>
+          <div><span id="pNTotal">—</span><small>Total</small></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="medir">
+      <button id="btnMedir" class="pri" disabled>Medir ahora</button>
+      <span class="t-sub" id="pMedirTxt">Conecta el equipo para pedir una medición manual.</span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>3. Datos recibidos</h2>
+    <div id="resumen" class="resumen"></div>
+    <div class="tabla-wrap">
+      <table>
+        <thead>
+          <tr><th>#</th><th>Modo</th><th>Fecha</th><th>Temp °C</th><th>HR %</th><th>Suelo %</th><th>SPAD</th></tr>
+        </thead>
+        <tbody id="cuerpo"></tbody>
+      </table>
+    </div>
+    <div class="botones">
+      <button id="btnUltimo">Eliminar último</button>
+      <button id="btnVaciar" class="peligro">Vaciar todo</button>
+      <button id="btnEjemplo">Cargar ejemplo</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>4. Exportar</h2>
+    <label for="nombre">Nombre del archivo</label>
+    <input type="text" id="nombre" value="agro_datos" maxlength="60" autocomplete="off" autocapitalize="off">
+    <label class="chk"><input type="checkbox" id="chkFecha" checked> Agregar fecha y hora al nombre</label>
+
+    <label for="filtro">Qué registros exportar</label>
+    <select id="filtro">
+      <option value="todos">Todos</option>
+      <option value="1">Solo automático (cada 10 min)</option>
+      <option value="0">Solo manual (botón derecho)</option>
+    </select>
+    <label class="chk"><input type="checkbox" id="chkNan" checked> En el CSV, escribir NAN en las celdas sin dato (igual que la SD)</label>
+
+    <div class="preview" id="preview"></div>
+    <div class="botones">
+      <button id="btnCsv" class="pri">Descargar CSV</button>
+      <button id="btnXlsx" class="pri">Descargar Excel (.xlsx)</button>
+    </div>
+  </section>
+
+  <details class="card">
+    <summary>Registro de eventos</summary>
+    <pre id="log"></pre>
+  </details>
+</main>
+
+<script>
+// ============================================================================
+//  LOGICA PURA (sin DOM): formato de datos, CSV, XLSX y reensamblado BLE
+// ============================================================================
+// ==BEGIN PURE==
+const SERVICE_UUID = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
+const CHAR_UUID    = 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
+const NM = [410, 435, 460, 485, 510, 535, 560, 585, 610, 645, 680, 705, 730, 760, 810, 860, 900, 940];
+
+// Mismas columnas que el CSV de la SD, mas "Recibido_app" (hora del celular)
+const CABECERA = ['Modo', 'Nro_medida', 'Nro_auto', 'Nro_manual', 'RTC',
+  'SHT31_Tem', 'SHT31_Hum', 'Higrometro',
+  ...NM.map((n, i) => 'CH' + (i + 1) + '_' + n + 'nm'),
+  'SPAD', 'Recibido_app'];
+
+function esNulo(v) { return v === null || v === undefined || (typeof v === 'number' && !isFinite(v)); }
+
+function fijo(v, dec) { return esNulo(v) ? null : Number(v).toFixed(dec); }
+
+// Fila para CSV: texto con los mismos decimales que el firmware
+function filaCsv(o) {
+  return [o.modo, o.n, o.n_auto, o.n_man, o.rtc,
+    fijo(o.temp, 2), fijo(o.hum, 2), fijo(o.suelo, 1),
+    ...o.ch.map(v => fijo(v, 4)),
+    fijo(o.spad, 2), o._recibido];
+}
+
+// Fila para Excel: numeros reales (precision completa)
+function filaXlsx(o) {
+  return [o.modo, o.n, o.n_auto, o.n_man, o.rtc, o.temp, o.hum, o.suelo, ...o.ch, o.spad, o._recibido];
+}
+
+function csvCelda(v, usarNan) {
+  if (esNulo(v) || v === '') return usarNan ? 'NAN' : '';
+  const s = String(v);
+  return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+function construirCsv(regs, usarNan) {
+  const lineas = [CABECERA.join(',')];
+  regs.forEach(o => lineas.push(filaCsv(o).map(v => csvCelda(v, usarNan)).join(',')));
+  return lineas.join('\r\n') + '\r\n';
+}
+
+// ---- Reensamblado: la notificacion BLE llega en trozos de 20 bytes; cada
+// ---- registro termina en '\n'.
+function crearAcumulador(onLinea, maxLen) {
+  maxLen = maxLen || 4096;
+  const dec = new TextDecoder();
+  let buf = '';
+  return {
+    push(bytes) {
+      buf += dec.decode(bytes, { stream: true });
+      let i;
+      while ((i = buf.indexOf('\n')) >= 0) {
+        const l = buf.slice(0, i).trim();
+        buf = buf.slice(i + 1);
+        if (l) onLinea(l);
+      }
+      if (buf.length > maxLen) buf = '';          // protege la memoria
+    },
+    reset() { buf = ''; }
+  };
+}
+
+// ---- Verificacion de la ESTRUCTURA del JSON ----
+// Lanza un Error con el motivo si algo no coincide con lo que envia el ESP32.
+// Si NO lanza error, el registro esta completo y es coherente, y se puede confirmar con ACK.
+// modo: 1 = automatico (cada 10 min), 0 = manual (boton derecho).
+function validarRegistro(o) {
+  const fallo = motivo => { throw new Error(motivo); };
+  const numeroONulo = v => v === null || (typeof v === 'number' && isFinite(v));
+  if (!o || typeof o !== 'object' || Array.isArray(o)) fallo('no es un objeto');
+  if (o.modo !== 0 && o.modo !== 1) fallo('modo invalido');
+  if (o.sd !== 0 && o.sd !== 1) fallo('campo sd invalido o ausente');   // estado de la SD del equipo
+  ['n', 'n_auto', 'n_man'].forEach(k => {
+    if (!Number.isInteger(o[k]) || o[k] < 0) fallo('campo ' + k + ' invalido');
+  });
+  if (o.n !== o.n_auto + o.n_man) fallo('n no coincide con n_auto + n_man');
+  if (o.rtc !== null && !(typeof o.rtc === 'string' &&
+      /^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}:\d{2}$/.test(o.rtc))) fallo('rtc invalido');
+  ['temp', 'hum', 'suelo', 'spad'].forEach(k => {
+    if (!numeroONulo(o[k])) fallo('campo ' + k + ' invalido o ausente');
+  });
+  if (!Array.isArray(o.ch) || o.ch.length !== 18) fallo('se esperaban 18 canales');
+  o.ch.forEach((v, i) => { if (!numeroONulo(v)) fallo('canal ' + (i + 1) + ' invalido'); });
+}
+
+// Convierte una linea de texto en registro verificado, o lanza Error con el motivo.
+function interpretarLinea(linea) {
+  let o;
+  try { o = JSON.parse(linea); } catch (e) { throw new Error('JSON invalido'); }
+  validarRegistro(o);
+  return o;
+}
+
+// Texto del ACK que se escribe en la caracteristica: "ACK:<n>" (n = numero de medida).
+// El ESP32 lo compara con el numero que acaba de enviar.
+function mensajeAck(n) { return 'ACK:' + n; }
+
+// Texto de una ORDEN para el ESP32: "CMD:MEDIR" (medicion manual) o
+// "CMD:BLE_OFF" (apagar su BLE antes de desconectarse).
+function mensajeCmd(nombre) { return 'CMD:' + nombre; }
+
+// Separa "dd/mm/aaaa hh:mm:ss" en {fecha, hora}; null si no hay RTC.
+function partesFecha(rtc) {
+  const m = typeof rtc === 'string' && /^(\d{2}\/\d{2}\/\d{4}) (\d{2}:\d{2}:\d{2})$/.exec(rtc);
+  return m ? { fecha: m[1], hora: m[2] } : null;
+}
+
+// Ultimo SPAD que no sea nulo entre los registros (el equipo manda el ultimo conocido).
+function spadConocido(regs) {
+  for (let i = regs.length - 1; i >= 0; i--) if (!esNulo(regs[i].spad)) return regs[i].spad;
+  return null;
+}
+
+// "hace 5 s", "hace 3 min", "hace 2 h"
+function haceTexto(seg) {
+  if (!isFinite(seg) || seg < 0) seg = 0;
+  if (seg < 60) return 'hace ' + seg + ' s';
+  if (seg < 3600) return 'hace ' + Math.floor(seg / 60) + ' min';
+  if (seg < 86400) return 'hace ' + Math.floor(seg / 3600) + ' h';
+  return 'hace ' + Math.floor(seg / 86400) + ' d';
+}
+
+// ---- XLSX minimo sin librerias (ZIP sin compresion + XML) ----
+const TABLA_CRC = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+
+function crc32(datos) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < datos.length; i++) c = TABLA_CRC[(c ^ datos[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+function zipSinCompresion(archivos) {
+  const enc = new TextEncoder();
+  const d = new Date();
+  const hora = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+  const fecha = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+  const locales = [], centrales = [];
+  let offset = 0;
+  for (const a of archivos) {
+    const nom = enc.encode(a.nombre), crc = crc32(a.datos), tam = a.datos.length;
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true);
+    lh.setUint16(8, 0, true); lh.setUint16(10, hora, true); lh.setUint16(12, fecha, true);
+    lh.setUint32(14, crc, true); lh.setUint32(18, tam, true); lh.setUint32(22, tam, true);
+    lh.setUint16(26, nom.length, true); lh.setUint16(28, 0, true);
+    locales.push(new Uint8Array(lh.buffer), nom, a.datos);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true);
+    ch.setUint16(8, 0x0800, true); ch.setUint16(10, 0, true); ch.setUint16(12, hora, true);
+    ch.setUint16(14, fecha, true); ch.setUint32(16, crc, true); ch.setUint32(20, tam, true);
+    ch.setUint32(24, tam, true); ch.setUint16(28, nom.length, true); ch.setUint32(42, offset, true);
+    centrales.push(new Uint8Array(ch.buffer), nom);
+    offset += 30 + nom.length + tam;
+  }
+  const tamCentral = centrales.reduce((s, p) => s + p.length, 0);
+  const fin = new DataView(new ArrayBuffer(22));
+  fin.setUint32(0, 0x06054b50, true);
+  fin.setUint16(8, archivos.length, true); fin.setUint16(10, archivos.length, true);
+  fin.setUint32(12, tamCentral, true); fin.setUint32(16, offset, true);
+  const partes = [...locales, ...centrales, new Uint8Array(fin.buffer)];
+  const total = partes.reduce((s, p) => s + p.length, 0);
+  const salida = new Uint8Array(total);
+  let pos = 0;
+  for (const p of partes) { salida.set(p, pos); pos += p.length; }
+  return salida;
+}
+
+function colNombre(i) {
+  let s = '', n = i + 1;
+  while (n > 0) { const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); }
+  return s;
+}
+
+function escXml(s) {
+  return String(s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function celdaXlsx(col, fila, v, estilo) {
+  if (esNulo(v) || v === '') return '';
+  const ref = colNombre(col) + fila, s = estilo ? ' s="' + estilo + '"' : '';
+  if (typeof v === 'number') return '<c r="' + ref + '"' + s + '><v>' + v + '</v></c>';
+  return '<c r="' + ref + '"' + s + ' t="inlineStr"><is><t>' + escXml(v) + '</t></is></c>';
+}
+
+function construirXlsx(regs) {
+  const enc = new TextEncoder();
+  const ultimaCol = colNombre(CABECERA.length - 1);
+  let filas = '<row r="1">' + CABECERA.map((h, c) => celdaXlsx(c, 1, h, 1)).join('') + '</row>';
+  regs.forEach((o, i) => {
+    const r = i + 2;
+    filas += '<row r="' + r + '">' + filaXlsx(o).map((v, c) => celdaXlsx(c, r, v, 0)).join('') + '</row>';
+  });
+  const ns = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+  const hoja = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<worksheet xmlns="' + ns + '"><dimension ref="A1:' + ultimaCol + (regs.length + 1) + '"/>' +
+    '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' +
+    '<cols><col min="1" max="' + CABECERA.length + '" width="13" customWidth="1"/>' +
+    '<col min="5" max="5" width="21" customWidth="1"/><col min="' + CABECERA.length + '" max="' + CABECERA.length + '" width="21" customWidth="1"/></cols>' +
+    '<sheetData>' + filas + '</sheetData></worksheet>';
+  const estilos = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<styleSheet xmlns="' + ns + '"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font>' +
+    '<font><b/><sz val="11"/><name val="Calibri"/></font></fonts>' +
+    '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>' +
+    '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+    '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+    '<cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+    '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs>' +
+    '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+  const tipos = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+    '<Default Extension="xml" ContentType="application/xml"/>' +
+    '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+    '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+    '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>';
+  const relPrincipal = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>';
+  const libro = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<workbook xmlns="' + ns + '" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+    '<sheets><sheet name="Datos" sheetId="1" r:id="rId1"/></sheets></workbook>';
+  const relLibro = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
+    '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>';
+  return zipSinCompresion([
+    { nombre: '[Content_Types].xml', datos: enc.encode(tipos) },
+    { nombre: '_rels/.rels', datos: enc.encode(relPrincipal) },
+    { nombre: 'xl/workbook.xml', datos: enc.encode(libro) },
+    { nombre: 'xl/_rels/workbook.xml.rels', datos: enc.encode(relLibro) },
+    { nombre: 'xl/styles.xml', datos: enc.encode(estilos) },
+    { nombre: 'xl/worksheets/sheet1.xml', datos: enc.encode(hoja) }
+  ]);
+}
+
+function nombreSeguro(txt) {
+  const limpio = String(txt || '').replace(/[\\/:*?"<>|\u0000-\u001F]/g, '').trim().replace(/\s+/g, '_');
+  return limpio || 'agro_datos';
+}
+
+function sello(d) {
+  const p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '_' + p(d.getHours()) + p(d.getMinutes());
+}
+
+function ahoraTexto(d) {
+  const p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' +
+         p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+}
+// ==END PURE==
+
+// ============================================================================
+//  INTERFAZ Y BLE
+// ============================================================================
+const $ = id => document.getElementById(id);
+const CLAVE = 'agro_registros_v2';   // v2: campos n_auto / n_man (los registros v1 se ignoran)
+const EJEMPLOS = [
+  // Automatico: lleva el ultimo SPAD conocido
+  '{"modo":1,"n":231,"n_auto":31,"n_man":200,"rtc":"30/09/2026 14:00:00","temp":24.00,"hum":50.00,"suelo":45.0,"ch":[0.5000,0.4000,0.2000,0.4000,0.4000,0.4000,0.0000,0.7000,0.8000,0.7000,0.4000,0.8000,0.7000,1.0000,1.0000,0.2300,0.1400,0.1000],"spad":42.70,"sd":1}',
+  // Manual: lleva fecha, temperatura, humedad y suelo
+  '{"modo":0,"n":232,"n_auto":31,"n_man":201,"rtc":"30/09/2026 14:03:12","temp":24.10,"hum":49.80,"suelo":45.0,"ch":[0.5000,0.4000,0.2000,0.4000,0.4000,0.4000,0.0000,0.7000,0.8000,0.7000,0.4000,0.8000,0.7000,1.0000,1.0000,0.2300,0.1400,0.1000],"spad":43.10,"sd":1}'
+];
+
+let registros = [];
+let dispositivo = null;
+let caracteristica = null;
+let conectado = false;
+let bloqueoPantalla = null;
+let midiendo = false;                 // true mientras se espera la medicion manual pedida desde la app
+let temporizadorMedir = null;         // limite de espera de esa medicion
+const MEDIR_TIMEOUT_MS = 60000;       // si en 60 s no llega la medicion manual, se rinde
+// Logo: ruta de un archivo junto a este HTML (p. ej. 'logo_inictel_uni.png') o un data:URI base64.
+// Si no se encuentra, se muestra el texto "INICTEL UNI".
+const LOGO_SRC = 'logo_inictel_uni.png';
+
+const acumulador = crearAcumulador(linea => procesarLinea(linea, false));
+
+function log(msg) {
+  const el = $('log');
+  el.textContent += '[' + ahoraTexto(new Date()).slice(11) + '] ' + msg + '\n';
+  const lineas = el.textContent.split('\n');
+  if (lineas.length > 201) el.textContent = lineas.slice(-201).join('\n');
+  el.scrollTop = el.scrollHeight;
+}
+
+function aviso(txt) {
+  const a = $('aviso');
+  a.hidden = !txt;
+  a.textContent = txt || '';
+}
+
+function estado(txt, tipo) {
+  $('estado').textContent = txt;
+  $('dot').className = 'dot' + (tipo ? ' ' + tipo : '');
+}
+
+function actualizarBotones() {
+  $('btnConectar').hidden = conectado;
+  $('btnReconectar').hidden = conectado || (dispositivo === null);
+  $('btnDesconectar').hidden = !conectado;
+  renderPanel();                      // el panel muestra el estado BLE y habilita "Medir"
+}
+
+// ---- Persistencia local (si el navegador la bloquea, la app sigue funcionando)
+function guardarLocal() {
+  try { localStorage.setItem(CLAVE, JSON.stringify(registros)); } catch (e) { /* ignorar */ }
+}
+function cargarLocal() {
+  try {
+    const t = localStorage.getItem(CLAVE);
+    if (t) registros = JSON.parse(t).filter(o => o && Array.isArray(o.ch) && o.ch.length === 18);
+  } catch (e) { registros = []; }
+}
+
+// ---- Tabla
+function celda(tr, txt, clase) {
+  const td = document.createElement('td');
+  td.textContent = txt;
+  if (clase) td.className = clase;
+  tr.appendChild(td);
+}
+function f(v, dec) { return esNulo(v) ? '—' : Number(v).toFixed(dec); }
+
+function render() {
+  const cuerpo = $('cuerpo');
+  cuerpo.textContent = '';
+  const est = registros.filter(o => o.modo === 1).length;
+  const esp = registros.filter(o => o.modo === 0).length;
+  $('resumen').textContent = registros.length
+    ? registros.length + ' registros (' + est + ' automáticos, ' + esp + ' manuales)' +
+      (registros.length > 50 ? ' · se muestran los últimos 50' : '')
+    : 'Aún no hay registros.';
+  if (!registros.length) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = 7; td.className = 'vacio';
+    td.textContent = 'Conecta el equipo, o usa "Cargar ejemplo" para probar.';
+    tr.appendChild(td); cuerpo.appendChild(tr);
+  }
+  registros.slice(-50).reverse().forEach(o => {
+    const tr = document.createElement('tr');
+    celda(tr, o.n);
+    celda(tr, o.modo === 1 ? 'Automático' : 'Manual');
+    if (o.rtc) celda(tr, o.rtc); else celda(tr, o._recibido + ' (app)', 'app');
+    celda(tr, f(o.temp, 1));
+    celda(tr, f(o.hum, 0));
+    celda(tr, f(o.suelo, 0));
+    celda(tr, f(o.spad, 1));
+    cuerpo.appendChild(tr);
+  });
+  actualizarPreview();
+  renderPanel();
+}
+
+// ---- Panel del equipo: recrea la pantalla principal de la OLED ----
+// Iconos (constantes, no vienen del equipo)
+const SVG_BASE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">';
+const ICONOS = {
+  bt: SVG_BASE + '<path d="M7 7l10 10-5 5V2l5 5L7 17"/></svg>',   // simbolo Bluetooth
+  ok: SVG_BASE + '<path d="M5 13l4 4L19 7"/></svg>',               // check
+  x:  SVG_BASE + '<path d="M6 6l12 12M18 6L6 18"/></svg>'          // X
+};
+
+function ponerValor(id, v, dec) { $(id).textContent = esNulo(v) ? '—' : Number(v).toFixed(dec); }
+function ponerBarra(id, v) { $(id).style.width = esNulo(v) ? '0%' : Math.max(0, Math.min(100, v)) + '%'; }
+function ponerIcono(id, icono, clase) { $(id).innerHTML = icono; $(id).className = 'estado-ico' + (clase ? ' ' + clase : ''); }
+
+// Dibuja el panel con el ULTIMO registro recibido. El SPAD es el ultimo conocido
+// (como en la OLED, que solo lo actualiza con la medicion manual).
+function renderPanel() {
+  const o = registros.length ? registros[registros.length - 1] : null;
+
+  // Cabecera: tipo de la ultima medicion y momento de recepcion
+  const badge = $('pModo');
+  badge.hidden = !o;
+  if (o) {
+    badge.textContent = o.modo === 1 ? 'Última medición: automática' : 'Última medición: manual';
+    badge.className = 'badge ' + (o.modo === 1 ? 'auto' : 'manual');
+  }
+  $('pRecibido').textContent = o ? o._recibido : 'sin datos';
+
+  // Fecha y hora del RTC del equipo
+  const fh = o ? partesFecha(o.rtc) : null;
+  $('pHora').textContent = fh ? fh.hora : '--:--:--';
+  $('pFecha').textContent = fh ? fh.fecha : (o ? 'Sin RTC' : '--/--/----');
+
+  // Mediciones de los sensores (— si el equipo no pudo medir)
+  ponerValor('pSuelo', o ? o.suelo : null, 0);  ponerBarra('bSuelo', o ? o.suelo : null);
+  ponerValor('pTemp',  o ? o.temp  : null, 1);
+  ponerValor('pHum',   o ? o.hum   : null, 0);  ponerBarra('bHum',   o ? o.hum   : null);
+  ponerValor('pSpad',  spadConocido(registros), 1);
+
+  // Numero de medicion
+  $('pNMan').textContent   = o ? o.n_man  : '—';
+  $('pNAuto').textContent  = o ? o.n_auto : '—';
+  $('pNTotal').textContent = o ? o.n      : '—';
+
+  // Estado de la SD (segun el ultimo registro) y del BLE (segun la conexion de esta app)
+  // (un registro guardado por una version anterior de la app no trae "sd": se muestra "Sin datos")
+  if (!o || (o.sd !== 0 && o.sd !== 1)) { ponerIcono('pSdIco', ICONOS.x,  '');    $('pSdTxt').textContent = 'Sin datos'; }
+  else if (o.sd === 1)                  { ponerIcono('pSdIco', ICONOS.ok, 'ok');  $('pSdTxt').textContent = 'Correcta'; }
+  else                                  { ponerIcono('pSdIco', ICONOS.x,  'err'); $('pSdTxt').textContent = 'Con error'; }
+  if (conectado) { ponerIcono('pBleIco', ICONOS.bt, 'ok'); $('pBleTxt').textContent = 'Conectado'; }
+  else           { ponerIcono('pBleIco', ICONOS.x,  '');   $('pBleTxt').textContent = 'Desconectado'; }
+
+  // Boton "Medir ahora"
+  $('btnMedir').disabled = !conectado || midiendo;
+  $('btnMedir').textContent = midiendo ? 'Midiendo…' : 'Medir ahora';
+  $('pMedirTxt').textContent = !conectado
+    ? 'Conecta el equipo para pedir una medición manual.'
+    : (midiendo ? 'El equipo está tomando 10 muestras y calculando el SPAD…'
+                : (o ? 'Pide al equipo una medición manual: 10 muestras con LED y cálculo del SPAD.'
+                     : 'Aún no hay datos: pulsa "Medir ahora" o espera la próxima medición automática.'));
+  actualizarHace();
+}
+
+// Texto "hace X s" junto a la ultima actualizacion (se refresca cada segundo)
+function actualizarHace() {
+  const o = registros.length ? registros[registros.length - 1] : null;
+  if (!o || !o._recibido) { $('pHace').textContent = ''; return; }
+  const t = new Date(o._recibido.replace(' ', 'T'));
+  $('pHace').textContent = '· ' + haceTexto(Math.round((Date.now() - t.getTime()) / 1000));
+}
+
+// ---- Recepcion y confirmacion (ACK) ----
+// Cada linea que llega por BLE se verifica con interpretarLinea(). Si la
+// estructura es correcta: se guarda el registro y se envia "ACK:<n>" al ESP32.
+// Si es incorrecta (perdida o corrupta): se descarta y NO se envia ACK, por lo
+// que el ESP32 mostrara "SIN CONFIRMAR" tras su espera de 2 s.
+// 'esPrueba' = true cuando viene de "Cargar ejemplo" (no se envia ACK).
+function procesarLinea(linea, esPrueba) {
+  try {
+    const o = interpretarLinea(linea);               // lanza error si algo no cuadra
+    o._recibido = ahoraTexto(new Date());
+    registros.push(o);
+    if (o.modo === 0 && midiendo) {                  // llego la medicion manual pedida desde la app
+      midiendo = false;
+      clearTimeout(temporizadorMedir);
+    }
+    guardarLocal();
+    render();
+    log('Registro #' + o.n + ' (' + (o.modo === 1 ? 'automático' : 'manual') + ') verificado');
+    if (!esPrueba) enviarAck(o.n);
+  } catch (e) {
+    log('Línea descartada, sin ACK (' + e.message + '): ' + linea.slice(0, 50));
+  }
+}
+
+// Cadena de promesas: las escrituras BLE se hacen una tras otra, porque Chrome
+// rechaza una escritura si hay otra en curso.
+let cadenaEscritura = Promise.resolve();
+
+// Escribe un texto en la caracteristica (con respuesta, para saber si llego al
+// ESP32), con un limite de 2 s. Devuelve una promesa.
+function escribirTexto(texto) {
+  if (!conectado || !caracteristica) return Promise.reject(new Error('sin conexión'));
+  const datos = new TextEncoder().encode(texto);
+  const tarea = cadenaEscritura.then(() => conTiempo(
+    caracteristica.writeValueWithResponse
+      ? caracteristica.writeValueWithResponse(datos)
+      : caracteristica.writeValue(datos),
+    2000, 'la escritura tardó más de 2 s'));
+  cadenaEscritura = tarea.catch(() => {});           // la cadena sigue aunque una escritura falle
+  return tarea;
+}
+
+// Confirma al ESP32 que el registro n llego completo y con estructura valida.
+function enviarAck(n) {
+  escribirTexto(mensajeAck(n))
+    .then(() => log('ACK #' + n + ' enviado'))
+    .catch(e => log('Falló el ACK #' + n + ': ' + e.message));
+}
+
+// Envia una orden al ESP32: 'MEDIR' (medicion manual) o 'BLE_OFF' (apagar su BLE).
+function enviarComando(nombre) { return escribirTexto(mensajeCmd(nombre)); }
+
+// Boton "Medir ahora": equivale a pulsar el boton derecho fisico. Queda en
+// estado "midiendo" hasta que llegue un registro manual (o pasen 60 s).
+async function pedirMedicion() {
+  if (!conectado || midiendo) return;
+  midiendo = true;
+  renderPanel();
+  try {
+    await enviarComando('MEDIR');
+    log('Orden enviada: medición manual');
+    clearTimeout(temporizadorMedir);
+    temporizadorMedir = setTimeout(() => {
+      if (!midiendo) return;
+      midiendo = false;
+      renderPanel();
+      log('Sin respuesta a la orden de medición (60 s)');
+      aviso('El equipo no devolvió la medición manual en 60 s. Revisa su pantalla.');
+    }, MEDIR_TIMEOUT_MS);
+  } catch (e) {
+    midiendo = false;
+    renderPanel();
+    log('No se pudo enviar la orden de medición: ' + e.message);
+    aviso('No se pudo enviar la orden de medición: ' + e.message);
+  }
+}
+
+function alNotificar(ev) { acumulador.push(ev.target.value); }
+
+// ---- BLE
+// Evita esperas infinitas: si un paso no responde, falla con un mensaje claro
+function conTiempo(promesa, ms, mensaje) {
+  let t;
+  const limite = new Promise((_, rechazar) => {
+    t = setTimeout(() => { const e = new Error(mensaje); e.name = 'TiempoAgotado'; rechazar(e); }, ms);
+  });
+  return Promise.race([promesa, limite]).finally(() => clearTimeout(t));
+}
+
+function explicarError(e) {
+  switch (e.name) {
+    case 'NotFoundError':
+      return 'No se eligió ningún equipo, o ninguno apareció. Revisa que el equipo muestre BLE:ANUNCIANDO y que ningún otro dispositivo (p. ej. el celular) esté conectado a él. Abre la guía "¿No aparece el equipo?" o prueba con "Mostrar todos los dispositivos".';
+    case 'NetworkError':
+      return 'Falló o se perdió la conexión con el equipo. Apaga y vuelve a activar el BLE en el equipo (IZQ dos veces) y reintenta. En Windows, quita el equipo en Configuración > Bluetooth.';
+    case 'SecurityError':
+      return 'El navegador bloqueó el acceso a Bluetooth en esta página (permiso o contexto no seguro).';
+    case 'TiempoAgotado':
+      return e.message + '. Apaga y vuelve a activar el BLE en el equipo (IZQ dos veces) y reintenta; si usas Windows, quita antes el equipo en Configuración > Bluetooth.';
+    default:
+      return 'No se pudo conectar: ' + e.message;
+  }
+}
+
+async function conectarGatt() {
+  const nombre = dispositivo.name || 'dispositivo';
+  estado('Conectando…', 'wait');
+  log('Conectando a ' + nombre + '…');
+  const server = await conTiempo(dispositivo.gatt.connect(), 20000, 'El equipo no respondió al conectar (20 s)');
+  log('Enlace establecido');
+  estado('Buscando servicio…', 'wait');
+  const servicio = await conTiempo(server.getPrimaryService(SERVICE_UUID), 15000,
+    'No se encontró el servicio del equipo (15 s)');
+  log('Servicio encontrado');
+  const car = await conTiempo(servicio.getCharacteristic(CHAR_UUID), 10000,
+    'No se encontró la característica de datos (10 s)');
+  estado('Activando notificaciones…', 'wait');
+  await conTiempo(car.startNotifications(), 10000, 'No se pudieron activar las notificaciones (10 s)');
+  caracteristica = car;
+  caracteristica.removeEventListener('characteristicvaluechanged', alNotificar);
+  caracteristica.addEventListener('characteristicvaluechanged', alNotificar);
+  acumulador.reset();
+  conectado = true;
+  estado('Conectado a ' + nombre + ' · esperando datos', 'on');
+  log('Notificaciones activadas');
+  actualizarBotones();
+  try { bloqueoPantalla = await navigator.wakeLock.request('screen'); } catch (e) { bloqueoPantalla = null; }
+}
+
+// nuevo = true: abre la lista de equipos; false: reutiliza el equipo ya elegido
+async function conectar(nuevo) {
+  aviso('');
+  try {
+    if (nuevo || !dispositivo) {
+      if (dispositivo && dispositivo.gatt.connected) dispositivo.gatt.disconnect();
+      estado('Buscando equipo… elígelo en la ventana del navegador', 'wait');
+      log('Abriendo selector de dispositivos' + ($('chkTodos').checked ? ' (todos)' : ' (filtrado)'));
+      const opciones = $('chkTodos').checked
+        ? { acceptAllDevices: true, optionalServices: [SERVICE_UUID] }
+        : { filters: [{ services: [SERVICE_UUID] }, { namePrefix: 'AgroMonitor' }], optionalServices: [SERVICE_UUID] };
+      dispositivo = await navigator.bluetooth.requestDevice(opciones);
+      dispositivo.addEventListener('gattserverdisconnected', alDesconectar);
+      log('Elegido: ' + (dispositivo.name || '(sin nombre)'));
+    }
+    await conectarGatt();
+  } catch (e) {
+    conectado = false;
+    estado('Sin conexión', 'err');
+    log('Error [' + e.name + ']: ' + e.message);
+    aviso(explicarError(e));
+    try { if (dispositivo && dispositivo.gatt.connected) dispositivo.gatt.disconnect(); } catch (x) { /* ignorar */ }
+    actualizarBotones();
+  }
+}
+
+function alDesconectar() {
+  conectado = false;
+  midiendo = false;
+  clearTimeout(temporizadorMedir);
+  caracteristica = null;
+  estado('Desconectado', 'err');
+  log('Equipo desconectado');
+  if (bloqueoPantalla) { bloqueoPantalla.release().catch(() => {}); bloqueoPantalla = null; }
+  actualizarBotones();
+}
+
+// Antes de cortar la conexion se le ordena al ESP32 que apague su BLE; asi queda
+// "apagado" y no "anunciando". Si la orden falla, se desconecta igual y se avisa.
+async function desconectar() {
+  if (conectado && caracteristica) {
+    try {
+      await enviarComando('BLE_OFF');
+      log('Orden enviada: el equipo apagará su BLE');
+    } catch (e) {
+      log('No se pudo ordenar el apagado del BLE: ' + e.message);
+      aviso('No se pudo ordenar al equipo que apague su BLE. Si sigue "anunciando", apágalo con su botón izquierdo.');
+    }
+  }
+  if (dispositivo && dispositivo.gatt.connected) dispositivo.gatt.disconnect();
+  dispositivo = null;                 // permite elegir otro equipo
+  conectado = false;
+  midiendo = false;
+  estado('Sin conexión');
+  actualizarBotones();
+}
+
+// ---- Exportacion
+function filtrados() {
+  const v = $('filtro').value;
+  return v === 'todos' ? registros : registros.filter(o => String(o.modo) === v);
+}
+
+function nombreFinal(ext) {
+  const base = nombreSeguro($('nombre').value);
+  return base + ($('chkFecha').checked ? '_' + sello(new Date()) : '') + '.' + ext;
+}
+
+function actualizarPreview() {
+  const n = filtrados().length;
+  $('preview').innerHTML = '';
+  const b1 = document.createElement('b'); b1.textContent = nombreFinal('csv');
+  const b2 = document.createElement('b'); b2.textContent = nombreFinal('xlsx');
+  $('preview').append('Se guardará como ', b1, ' o ', b2, ' (' + n + ' registros).');
+  $('btnCsv').disabled = $('btnXlsx').disabled = (n === 0);
+}
+
+function descargar(blob, nombre) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = nombre;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  log('Descargado: ' + nombre);
+}
+
+function exportarCsv() {
+  const texto = '\ufeff' + construirCsv(filtrados(), $('chkNan').checked);
+  descargar(new Blob([texto], { type: 'text/csv;charset=utf-8' }), nombreFinal('csv'));
+}
+
+function exportarXlsx() {
+  const datos = construirXlsx(filtrados());
+  descargar(new Blob([datos], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), nombreFinal('xlsx'));
+}
+
+// ---- Eventos
+$('btnConectar').onclick = () => conectar(true);
+$('btnReconectar').onclick = () => conectar(false);
+$('btnDesconectar').onclick = desconectar;
+$('btnMedir').onclick = pedirMedicion;
+$('btnCsv').onclick = exportarCsv;
+$('btnXlsx').onclick = exportarXlsx;
+$('btnEjemplo').onclick = () => EJEMPLOS.forEach(linea => procesarLinea(linea, true));
+$('btnUltimo').onclick = () => { registros.pop(); guardarLocal(); render(); };
+$('btnVaciar').onclick = () => {
+  if (registros.length && confirm('¿Borrar los ' + registros.length + ' registros de la app? (La tarjeta SD no se toca.)')) {
+    registros = []; guardarLocal(); render();
+  }
+};
+['nombre', 'chkFecha', 'filtro'].forEach(id => $(id).addEventListener('input', actualizarPreview));
+
+// ---- Logo: se intenta cargar LOGO_SRC; si falla, queda el texto "INICTEL UNI"
+(function cargarLogo() {
+  const img = $('logo');
+  if (!LOGO_SRC) return;
+  img.onload = () => { img.hidden = false; $('logoTexto').hidden = true; };
+  img.onerror = () => { img.hidden = true; $('logoTexto').hidden = false; };
+  img.src = LOGO_SRC;
+})();
+
+// ---- Inicio
+cargarLocal();
+render();
+actualizarBotones();
+setInterval(actualizarHace, 1000);   // refresca el "hace X s" del panel
+if (navigator.bluetooth && navigator.bluetooth.getAvailability) {
+  navigator.bluetooth.getAvailability().then(ok => {
+    log('Adaptador Bluetooth disponible: ' + ok);
+    if (!ok) aviso('El navegador no detecta un adaptador Bluetooth disponible. Enciende el Bluetooth de la laptop (o conecta un adaptador BLE) y recarga la página.');
+  }).catch(() => {});
+}
+if (!navigator.bluetooth) {
+  $('btnConectar').disabled = true;
+  aviso('Este navegador no permite Web Bluetooth. Abre la página con Chrome en Android y por HTTPS (un archivo local o http:// no funciona). Puedes probar la exportación con "Cargar ejemplo".');
+  log('navigator.bluetooth no disponible');
+}
+
+// ---- Registro del Service Worker para funcionamiento offline ----
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then(reg => console.log('Service Worker registrado correctamente:', reg.scope))
+      .catch(err => console.log('Error al registrar el Service Worker:', err));
+  });
+}
+</script>
+</body>
+</html>
